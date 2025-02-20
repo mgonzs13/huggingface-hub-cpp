@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 long get_file_size(const std::string &filename) {
 	struct stat stat_buf;
@@ -12,6 +13,36 @@ long get_file_size(const std::string &filename) {
 			return stat_buf.st_size;
 	}
 	return 0; // File doesn't exist
+}
+
+std::string expandHome(const std::string &path) {
+  if (!path.empty() && path[0] == '~') {
+      const char *home = getenv("HOME");  // Get $HOME environment variable
+      if (home) {
+          return std::string(home) + path.substr(1);  // Replace '~' with $HOME
+      }
+  }
+  return path;  // Return original if no '~'
+}
+
+
+void create_directories(const std::string &path) {
+  size_t pos = 0;
+  std::string dir;
+  while ((pos = path.find('/', pos + 1)) != std::string::npos) {
+      dir = path.substr(0, pos);
+      if (dir.empty() || dir == "/") continue;
+      struct stat info;
+      if (stat(dir.c_str(), &info) != 0) {
+        if (mkdir(dir.c_str(), 0755) != 0) {
+          std::cerr << "Error creating directory: " << dir << std::endl;
+          return;
+        }
+      } else if (!(info.st_mode & S_IFDIR)) {
+        std::cerr << "Error: " << dir << " is not a directory!" << std::endl;
+        return;
+      }
+  }
 }
 
 size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
@@ -25,7 +56,7 @@ int progress_callback(void *ptr, curl_off_t total, curl_off_t now, curl_off_t,
                       curl_off_t) {
   static auto start_time = std::chrono::steady_clock::now();
   if (total > 0) {
-    int width = 50; // Progress bar width
+    int width = 30; // Progress bar width
     float percent = static_cast<float>(now) / total;
     int filled = static_cast<int>(percent * width);
 
@@ -57,17 +88,34 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
                                  const std::string &local_dir,
                                  bool force_download) {
   CURL *curl = curl_easy_init();
-  if (!curl)
+  if (!curl) {
     return false;
 
+  }
 
-	std::string output_path = local_dir + filename;
-	long existing_size = get_file_size(output_path);
+
+	std::string output_path = cache_dir + "/" + filename;
+  std::string expanded_path = expandHome(output_path);
+
+	long existing_size = get_file_size(expanded_path);
 
 	std::string url = "https://huggingface.co/" + repo_id + "/resolve/main/" + filename;
-	std::ofstream file(output_path, std::ios::binary | std::ios::app); // Append mode
+
+  size_t last_slash = expanded_path.find_last_of('/');
+  if (last_slash != std::string::npos) {
+    create_directories(expanded_path.substr(0, last_slash + 1));
+  }
+
+	std::ofstream file(expanded_path, std::ios::binary | std::ios::app); // Append mode
+
+  if (!file.is_open()) {
+    std::cerr << "Failed to open file: " << expanded_path << std::endl;
+    curl_easy_cleanup(curl);
+    return false;
+  }
 
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &file);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -82,6 +130,7 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
   CURLcode res = curl_easy_perform(curl);
   curl_easy_cleanup(curl);
 
+  std::cout << "\nDownloaded to: " << expanded_path << std::endl;
   std::cout << std::endl; // Move to the next line after download
   return res == CURLE_OK;
 }
