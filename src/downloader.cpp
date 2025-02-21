@@ -6,6 +6,11 @@
 #include <iostream>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <filesystem>
+#include <sstream>
+#include <nlohmann/json.hpp>
+
+namespace fs = std::filesystem;
 
 long get_file_size(const std::string &filename) {
 	struct stat stat_buf;
@@ -15,34 +20,28 @@ long get_file_size(const std::string &filename) {
 	return 0; // File doesn't exist
 }
 
-std::string expandHome(const std::string &path) {
-  if (!path.empty() && path[0] == '~') {
-      const char *home = getenv("HOME");  // Get $HOME environment variable
-      if (home) {
-          return std::string(home) + path.substr(1);  // Replace '~' with $HOME
-      }
-  }
-  return path;  // Return original if no '~'
-}
+std::string create_cache_system(const std::string &cache_dir, const std::string &repo_id) {
+  std::string model_folder = std::string("models/" + repo_id);
 
-
-void create_directories(const std::string &path) {
   size_t pos = 0;
-  std::string dir;
-  while ((pos = path.find('/', pos + 1)) != std::string::npos) {
-      dir = path.substr(0, pos);
-      if (dir.empty() || dir == "/") continue;
-      struct stat info;
-      if (stat(dir.c_str(), &info) != 0) {
-        if (mkdir(dir.c_str(), 0755) != 0) {
-          std::cerr << "Error creating directory: " << dir << std::endl;
-          return;
-        }
-      } else if (!(info.st_mode & S_IFDIR)) {
-        std::cerr << "Error: " << dir << " is not a directory!" << std::endl;
-        return;
-      }
+  while ((pos = model_folder.find("/", pos)) != std::string::npos) {
+      model_folder.replace(pos, 1, "--");
+      pos += 2;
   }
+
+  std::string expanded_cache_dir = fs::absolute(fs::path(cache_dir));
+
+  std::string model_cache_path = expanded_cache_dir + "/" + model_folder + "/";
+
+  std::string refs_path = model_cache_path + std::string("refs");
+  std::string blobs_path = model_cache_path + std::string("blobs");
+  std::string snapshots_path = model_cache_path + std::string("snapshots");
+
+  fs::create_directories(refs_path);
+  fs::create_directories(blobs_path);
+  fs::create_directories(snapshots_path);
+
+  return model_cache_path;
 }
 
 size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
@@ -87,29 +86,48 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
                                  const std::string &cache_dir,
                                  const std::string &local_dir,
                                  bool force_download) {
+  
+  // If model exists, return true
+  if (fs::exists(local_dir)) {
+    return true;
+  }
+  
   CURL *curl = curl_easy_init();
   if (!curl) {
     return false;
-
   }
 
+  // 1. Create Cache Dir Struct
+  std::string cache_dir = create_cache_system(cache_dir, repo_id);
 
-	std::string output_path = cache_dir + "/" + filename;
-  std::string expanded_path = expandHome(output_path);
+  // 2. Check if model file exist
+  fs::path blob_file_path;
+  fs::path snapshot_file_path(cache_dir + "snapshots/" + filename)
+  bool file_has_been_downloaded = false;
 
-	long existing_size = get_file_size(expanded_path);
+  if (!fs::exists(snapshot_file_path)) {
+    // Create blob file
+    blob_file_path = fs::path(cache_dir + "blobs/" + filename);
 
+    // Create refs file
+
+
+    // Create snapshot file
+    fs::create_symlink(blob_file_path, snapshot_file_path)
+  } else {
+    // Get the blob file
+    blob_file_path = fs::read_symlink(snapshot_file_path);
+  }
+  // Set file path to the blob
+
+  // 3. Download the file
 	std::string url = "https://huggingface.co/" + repo_id + "/resolve/main/" + filename;
 
-  size_t last_slash = expanded_path.find_last_of('/');
-  if (last_slash != std::string::npos) {
-    create_directories(expanded_path.substr(0, last_slash + 1));
-  }
-
-	std::ofstream file(expanded_path, std::ios::binary | std::ios::app); // Append mode
+  long existing_size = get_file_size(blob_file_path);
+	std::ofstream file(blob_file_path, std::ios::binary | std::ios::app); // Append mode
 
   if (!file.is_open()) {
-    std::cerr << "Failed to open file: " << expanded_path << std::endl;
+    std::cerr << "Failed to open file: " << blob_file_path << std::endl;
     curl_easy_cleanup(curl);
     return false;
   }
