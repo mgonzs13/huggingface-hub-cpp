@@ -12,6 +12,12 @@
 
 namespace fs = std::filesystem;
 
+struct FileMetadata {
+  std::string sha256;
+  std::string commit;
+};
+
+
 long get_file_size(const std::string &filename) {
 	struct stat stat_buf;
 	if (stat(filename.c_str(), &stat_buf) == 0) {
@@ -48,6 +54,58 @@ size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) {
   std::ofstream *out = static_cast<std::ofstream *>(stream);
   out->write(static_cast<char *>(ptr), size * nmemb);
   return size * nmemb;
+}
+
+// Function to extract SHA256 from Git LFS metadata
+std::string extract_SHA256(const std::string& response) {
+  std::istringstream stream(response);
+  std::string line;
+
+  while (std::getline(stream, line)) {
+      if (line.find("oid sha256:") != std::string::npos) {
+          return line.substr(line.find("sha256:") + 8);  // Extract after "sha256:"
+      }
+  }
+  return "";  // Return empty if not found
+}
+
+FileMetadata get_metadata_from_hf(const std::string& repo, const std::string& file) {
+  FileMetadata metadata;
+  std::string url = "https://huggingface.co/" + repo + "/raw/main/" + file;
+  std::string response;
+
+  CURL* curl = curl_easy_init();
+  if (!curl) {
+      std::cerr << "Failed to initialize CURL\n";
+      return;
+  }
+
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, [](char* buffer, size_t size, size_t nitems, std::string* userdata) -> size_t {
+      std::string header(buffer, size * nitems);
+      if (header.find("x-repo-commit:") == 0) {
+          *userdata = header.substr(header.find(":") + 2);  // Extract commit hash
+      }
+      return size * nitems;
+  });
+  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &metadata.commit);
+
+
+  CURLcode res = curl_easy_perform(curl);
+  curl_easy_cleanup(curl);
+
+  if (res != CURLE_OK) {
+      std::cerr << "CURL request failed: " << curl_easy_strerror(res) << "\n";
+      return;
+  }
+
+  metadata.sha256 = extract_SHA256(response);
+
+  return metadata;
 }
 
 // Progress bar function
@@ -98,33 +156,38 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
   }
 
   // 1. Create Cache Dir Struct
-  std::string cache_dir = create_cache_system(cache_dir, repo_id);
+  std::string cache_model_dir = create_cache_system(cache_dir, repo_id);
 
   // 2. Check if model file exist
-  fs::path blob_file_path;
-  fs::path snapshot_file_path(cache_dir + "snapshots/" + filename)
-  bool file_has_been_downloaded = false;
+  FileMetadata metadata = get_metadata_from_hf(repo_id, filename);
+  fs::path blob_file_path(cache_model_dir + "blobs/" + metadata.sha256);
+  fs::path snapshot_file_path(cache_model_dir + "snapshots/" + metadata.sha256 + "/" + filename);
+  fs::path refs_file_path(cache_model_dir + "refs/main");
 
-  if (!fs::exists(snapshot_file_path)) {
-    // Create blob file
-    blob_file_path = fs::path(cache_dir + "blobs/" + filename);
+  if (fs::exists(refs_file_path)) {
+    std::ifstream refs_file(refs_file_path);
+    std::string commit;
+    refs_file >> commit;
+    refs_file.close();
 
-    // Create refs file
+    if (commit != metadata.commit) {
+      std::cout << "Model outdated.\n";
+      fs::remove_all(cache_model_dir + "snapshots");
+      fs::remove_all(cache_model_dir + "blobs");
+      create_cache_system(cache_dir, repo_id);
+    }
 
-
-    // Create snapshot file
-    fs::create_symlink(blob_file_path, snapshot_file_path)
   } else {
-    // Get the blob file
-    blob_file_path = fs::read_symlink(snapshot_file_path);
+    std::ofstream refs_file(refs_file_path);
+    refs_file << metadata.commit;
+    refs_file.close();
   }
-  // Set file path to the blob
 
   // 3. Download the file
 	std::string url = "https://huggingface.co/" + repo_id + "/resolve/main/" + filename;
 
   long existing_size = get_file_size(blob_file_path);
-	std::ofstream file(blob_file_path, std::ios::binary | std::ios::app); // Append mode
+	std::ofstream file(blob_file_path, std::ios::binary | std::ios::app);
 
   if (!file.is_open()) {
     std::cerr << "Failed to open file: " << blob_file_path << std::endl;
@@ -146,9 +209,14 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
 	}
 
   CURLcode res = curl_easy_perform(curl);
+
+  fs::create_directories(snapshot_file_path.parent_path()); 
+  fs::create_symlink(blob_file_path, snapshot_file_path);
+
+  file.close();
   curl_easy_cleanup(curl);
 
-  std::cout << "\nDownloaded to: " << expanded_path << std::endl;
+  std::cout << "\nDownloaded to: " << snapshot_file_path << std::endl;
   std::cout << std::endl; // Move to the next line after download
   return res == CURLE_OK;
 }
