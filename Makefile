@@ -1,6 +1,6 @@
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++17 -Iexternal/json -Iinclude
+CXXFLAGS = -Wall -Wextra -std=c++17 -Iinclude -O0 -g
 LDFLAGS = -lcurl 
 
 # Directories
