@@ -1,6 +1,6 @@
 #include "downloader.h"
-#include <chrono>
 #include <algorithm>
+#include <chrono>
 #include <curl/curl.h>
 #include <filesystem>
 #include <fstream>
@@ -11,12 +11,6 @@
 #include <sys/types.h>
 
 namespace fs = std::filesystem;
-
-struct FileMetadata {
-  std::string sha256;
-  std::string commit;
-  uint64_t size;
-};
 
 long get_file_size(const std::string &filename) {
   struct stat stat_buf;
@@ -92,8 +86,9 @@ std::string extract_SHA256(const std::string &response) {
 
   while (std::getline(stream, line)) {
     if (line.find("oid sha256:") != std::string::npos) {
-      auto result = line.substr(line.find("sha256:") + 7); // Extract after "sha256:"
-      stream.str(""); // Clear the stream
+      auto result =
+          line.substr(line.find("sha256:") + 7); // Extract after "sha256:"
+      stream.str("");                            // Clear the stream
       return result;
     }
   }
@@ -115,9 +110,9 @@ uint64_t extract_file_size(const std::string &response) {
   return 0; // Return empty if not found
 }
 
-FileMetadata get_metadata_from_hf(const std::string &repo,
-                                  const std::string &file) {
-  FileMetadata metadata;
+struct FileMetadata get_metadata_from_hf(const std::string &repo,
+                                         const std::string &file) {
+  struct FileMetadata metadata;
   std::string url = "https://huggingface.co/" + repo + "/raw/main/" + file;
   std::string response, headers;
 
@@ -164,10 +159,10 @@ FileMetadata get_metadata_from_hf(const std::string &repo,
 }
 
 // Progress bar function
-int progress_callback(void *userdata, curl_off_t total, curl_off_t now, curl_off_t,
-                      curl_off_t) {
+int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
+                      curl_off_t, curl_off_t) {
   static auto start_time = std::chrono::steady_clock::now();
-  FileMetadata *metadata = static_cast<FileMetadata *>(userdata);
+  struct FileMetadata *metadata = static_cast<struct FileMetadata *>(userdata);
   uint64_t size = metadata->size;
   uint64_t byte_offset = total - size;
   uint64_t downloaded = now - byte_offset;
@@ -191,8 +186,8 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now, curl_off
     std::cout << "] " << std::fixed << std::setprecision(2) << (percent * 100)
               << "%";
 
-    std::cout << "   " << downloaded / 1024 / 1024 << " MB / " << size / 1024 / 1024
-              << " MB";
+    std::cout << "   " << downloaded / 1024 / 1024 << " MB / "
+              << size / 1024 / 1024 << " MB";
 
     // Print speed and ETA
     std::cout << " " << (speed / 1024 / 1024)
@@ -202,20 +197,24 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now, curl_off
   return 0; // Continue downloading
 }
 
-bool Downloader::hf_hub_download(const std::string &repo_id,
-                                 const std::string &filename,
-                                 const std::string &cache_dir,
-                                 const std::string &local_dir,
-                                 bool force_download) {
+struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
+                                                  const std::string &filename,
+                                                  const std::string &cache_dir,
+                                                  const std::string &local_dir,
+                                                  bool force_download) {
+
+  struct DownloadResult result;
+  result.success = true;
 
   // If model exists, return true
   if (fs::exists(local_dir)) {
-    return true;
+    return result;
   }
 
   CURL *curl = curl_easy_init();
   if (!curl) {
-    return false;
+    result.success = false;
+    return result;
   }
 
   // 1. Create Cache Dir Struct
@@ -224,7 +223,7 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
   std::cout << "Downloading " << filename << " from " << repo_id << std::endl;
 
   // 2. Check if model file exist
-  FileMetadata metadata = get_metadata_from_hf(repo_id, filename);
+  struct FileMetadata metadata = get_metadata_from_hf(repo_id, filename);
   fs::path blob_file_path(cache_model_dir + "blobs/" + metadata.sha256);
   fs::path blob_incomplete_file_path(cache_model_dir + "blobs/" +
                                      metadata.sha256 + ".incomplete");
@@ -234,7 +233,7 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
 
   if (fs::exists(blob_file_path) && !force_download) {
     std::cout << "Blob file exists. Skipping download..." << std::endl;
-    return true;
+    return result;
   }
 
   if (fs::exists(refs_file_path)) {
@@ -260,7 +259,8 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
     std::cerr << "Failed to open file: " << blob_incomplete_file_path
               << std::endl;
     curl_easy_cleanup(curl);
-    return false;
+    result.success = false;
+    return result;
   }
 
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());   // Set URL
@@ -288,7 +288,8 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
     std::cerr << "CURL request failed: " << curl_easy_strerror(res) << "\n";
     file.close();
     curl_easy_cleanup(curl);
-    return false;
+    result.success = false;
+    return result;
   }
 
   if (fs::exists(snapshot_file_path)) {
@@ -302,5 +303,8 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
   curl_easy_cleanup(curl);
 
   std::cout << "Downloaded to: " << snapshot_file_path << std::endl;
-  return res == CURLE_OK;
+
+  result.success = res == CURLE_OK;
+  result.path = snapshot_file_path;
+  return result;
 }
