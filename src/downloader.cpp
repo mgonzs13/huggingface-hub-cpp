@@ -200,16 +200,10 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
 struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
                                                   const std::string &filename,
                                                   const std::string &cache_dir,
-                                                  const std::string &local_dir,
                                                   bool force_download) {
 
   struct DownloadResult result;
   result.success = true;
-
-  // // If model exists, return true
-  // if (std::filesystem::exists(local_dir)) {
-  //   return result;
-  // }
 
   CURL *curl = curl_easy_init();
   if (!curl) {
