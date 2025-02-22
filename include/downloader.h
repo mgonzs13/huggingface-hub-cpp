@@ -3,6 +3,8 @@
 
 #include <string>
 
+namespace huggingface_hub {
+
 struct FileMetadata {
   std::string sha256;
   std::string commit;
@@ -24,3 +26,4 @@ public:
 };
 
 #endif // DOWNLOADER_H
+}

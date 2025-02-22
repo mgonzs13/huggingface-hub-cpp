@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-namespace fs = std::filesystem;
+using namespace huggingface_hub;
 
 long get_file_size(const std::string &filename) {
   struct stat stat_buf;
@@ -20,14 +20,14 @@ long get_file_size(const std::string &filename) {
   return 0; // File doesn't exist
 }
 
-fs::path expand_user_home(const std::string &path) {
+std::filesystem::path expand_user_home(const std::string &path) {
   if (!path.empty() && path[0] == '~') {
     const char *home = std::getenv("HOME"); // Get HOME environment variable
     if (home) {
-      return fs::path(home + path.substr(1));
+      return std::filesystem::path(home + path.substr(1));
     }
   }
-  return fs::path(path);
+  return std::filesystem::path(path);
 }
 
 std::string create_cache_system(const std::string &cache_dir,
@@ -48,9 +48,9 @@ std::string create_cache_system(const std::string &cache_dir,
   std::string blobs_path = model_cache_path + std::string("blobs");
   std::string snapshots_path = model_cache_path + std::string("snapshots");
 
-  fs::create_directories(refs_path);
-  fs::create_directories(blobs_path);
-  fs::create_directories(snapshots_path);
+  std::filesystem::create_directories(refs_path);
+  std::filesystem::create_directories(blobs_path);
+  std::filesystem::create_directories(snapshots_path);
 
   return model_cache_path;
 }
@@ -207,7 +207,7 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   result.success = true;
 
   // If model exists, return true
-  if (fs::exists(local_dir)) {
+  if (std::filesystem::exists(local_dir)) {
     return result;
   }
 
@@ -224,19 +224,20 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
 
   // 2. Check if model file exist
   struct FileMetadata metadata = get_metadata_from_hf(repo_id, filename);
-  fs::path blob_file_path(cache_model_dir + "blobs/" + metadata.sha256);
-  fs::path blob_incomplete_file_path(cache_model_dir + "blobs/" +
-                                     metadata.sha256 + ".incomplete");
-  fs::path snapshot_file_path(cache_model_dir + "snapshots/" + metadata.commit +
-                              "/" + filename);
-  fs::path refs_file_path(cache_model_dir + "refs/main");
+  std::filesystem::path blob_file_path(cache_model_dir + "blobs/" +
+                                       metadata.sha256);
+  std::filesystem::path blob_incomplete_file_path(
+      cache_model_dir + "blobs/" + metadata.sha256 + ".incomplete");
+  std::filesystem::path snapshot_file_path(cache_model_dir + "snapshots/" +
+                                           metadata.commit + "/" + filename);
+  std::filesystem::path refs_file_path(cache_model_dir + "refs/main");
 
-  if (fs::exists(blob_file_path) && !force_download) {
+  if (std::filesystem::exists(blob_file_path) && !force_download) {
     std::cout << "Blob file exists. Skipping download..." << std::endl;
     return result;
   }
 
-  if (fs::exists(refs_file_path)) {
+  if (std::filesystem::exists(refs_file_path)) {
     std::ifstream refs_file(refs_file_path);
     std::string commit;
     refs_file >> commit;
@@ -282,7 +283,7 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   CURLcode res = curl_easy_perform(curl);
   std::cout << std::endl; // Move to the next line after download
 
-  fs::create_directories(snapshot_file_path.parent_path());
+  std::filesystem::create_directories(snapshot_file_path.parent_path());
 
   if (res != CURLE_OK) {
     std::cerr << "CURL request failed: " << curl_easy_strerror(res) << "\n";
@@ -292,12 +293,12 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
     return result;
   }
 
-  if (fs::exists(snapshot_file_path)) {
+  if (std::filesystem::exists(snapshot_file_path)) {
     std::cout << "Snapshot file exists. Deleting..." << std::endl;
-    fs::remove(snapshot_file_path);
+    std::filesystem::remove(snapshot_file_path);
   }
-  fs::rename(blob_incomplete_file_path, blob_file_path);
-  fs::create_symlink(blob_file_path, snapshot_file_path);
+  std::filesystem::rename(blob_incomplete_file_path, blob_file_path);
+  std::filesystem::create_symlink(blob_file_path, snapshot_file_path);
 
   file.close();
   curl_easy_cleanup(curl);
