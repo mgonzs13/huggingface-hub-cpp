@@ -206,10 +206,10 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   struct DownloadResult result;
   result.success = true;
 
-  // If model exists, return true
-  if (std::filesystem::exists(local_dir)) {
-    return result;
-  }
+  // // If model exists, return true
+  // if (std::filesystem::exists(local_dir)) {
+  //   return result;
+  // }
 
   CURL *curl = curl_easy_init();
   if (!curl) {
@@ -231,6 +231,8 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   std::filesystem::path snapshot_file_path(cache_model_dir + "snapshots/" +
                                            metadata.commit + "/" + filename);
   std::filesystem::path refs_file_path(cache_model_dir + "refs/main");
+
+  result.path = snapshot_file_path;
 
   if (std::filesystem::exists(blob_file_path) && !force_download) {
     std::cout << "Blob file exists. Skipping download..." << std::endl;
@@ -306,6 +308,5 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   std::cout << "Downloaded to: " << snapshot_file_path << std::endl;
 
   result.success = res == CURLE_OK;
-  result.path = snapshot_file_path;
   return result;
 }
