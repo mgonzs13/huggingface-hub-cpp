@@ -1,6 +1,6 @@
 #include "downloader.h"
-#include <chrono>
 #include <algorithm>
+#include <chrono>
 #include <curl/curl.h>
 #include <filesystem>
 #include <fstream>
@@ -10,13 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-namespace fs = std::filesystem;
-
-struct FileMetadata {
-  std::string sha256;
-  std::string commit;
-  uint64_t size;
-};
+using namespace huggingface_hub;
 
 long get_file_size(const std::string &filename) {
   struct stat stat_buf;
@@ -26,14 +20,14 @@ long get_file_size(const std::string &filename) {
   return 0; // File doesn't exist
 }
 
-fs::path expand_user_home(const std::string &path) {
+std::filesystem::path expand_user_home(const std::string &path) {
   if (!path.empty() && path[0] == '~') {
     const char *home = std::getenv("HOME"); // Get HOME environment variable
     if (home) {
-      return fs::path(home + path.substr(1));
+      return std::filesystem::path(home + path.substr(1));
     }
   }
-  return fs::path(path);
+  return std::filesystem::path(path);
 }
 
 std::string create_cache_system(const std::string &cache_dir,
@@ -54,9 +48,9 @@ std::string create_cache_system(const std::string &cache_dir,
   std::string blobs_path = model_cache_path + std::string("blobs");
   std::string snapshots_path = model_cache_path + std::string("snapshots");
 
-  fs::create_directories(refs_path);
-  fs::create_directories(blobs_path);
-  fs::create_directories(snapshots_path);
+  std::filesystem::create_directories(refs_path);
+  std::filesystem::create_directories(blobs_path);
+  std::filesystem::create_directories(snapshots_path);
 
   return model_cache_path;
 }
@@ -92,8 +86,9 @@ std::string extract_SHA256(const std::string &response) {
 
   while (std::getline(stream, line)) {
     if (line.find("oid sha256:") != std::string::npos) {
-      auto result = line.substr(line.find("sha256:") + 7); // Extract after "sha256:"
-      stream.str(""); // Clear the stream
+      auto result =
+          line.substr(line.find("sha256:") + 7); // Extract after "sha256:"
+      stream.str("");                            // Clear the stream
       return result;
     }
   }
@@ -115,9 +110,9 @@ uint64_t extract_file_size(const std::string &response) {
   return 0; // Return empty if not found
 }
 
-FileMetadata get_metadata_from_hf(const std::string &repo,
-                                  const std::string &file) {
-  FileMetadata metadata;
+struct FileMetadata get_metadata_from_hf(const std::string &repo,
+                                         const std::string &file) {
+  struct FileMetadata metadata;
   std::string url = "https://huggingface.co/" + repo + "/raw/main/" + file;
   std::string response, headers;
 
@@ -164,10 +159,10 @@ FileMetadata get_metadata_from_hf(const std::string &repo,
 }
 
 // Progress bar function
-int progress_callback(void *userdata, curl_off_t total, curl_off_t now, curl_off_t,
-                      curl_off_t) {
+int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
+                      curl_off_t, curl_off_t) {
   static auto start_time = std::chrono::steady_clock::now();
-  FileMetadata *metadata = static_cast<FileMetadata *>(userdata);
+  struct FileMetadata *metadata = static_cast<struct FileMetadata *>(userdata);
   uint64_t size = metadata->size;
   uint64_t byte_offset = total - size;
   uint64_t downloaded = now - byte_offset;
@@ -191,8 +186,8 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now, curl_off
     std::cout << "] " << std::fixed << std::setprecision(2) << (percent * 100)
               << "%";
 
-    std::cout << "   " << downloaded / 1024 / 1024 << " MB / " << size / 1024 / 1024
-              << " MB";
+    std::cout << "   " << downloaded / 1024 / 1024 << " MB / "
+              << size / 1024 / 1024 << " MB";
 
     // Print speed and ETA
     std::cout << " " << (speed / 1024 / 1024)
@@ -202,20 +197,18 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now, curl_off
   return 0; // Continue downloading
 }
 
-bool Downloader::hf_hub_download(const std::string &repo_id,
-                                 const std::string &filename,
-                                 const std::string &cache_dir,
-                                 const std::string &local_dir,
-                                 bool force_download) {
+struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
+                                                  const std::string &filename,
+                                                  const std::string &cache_dir,
+                                                  bool force_download) {
 
-  // If model exists, return true
-  if (fs::exists(local_dir)) {
-    return true;
-  }
+  struct DownloadResult result;
+  result.success = true;
 
   CURL *curl = curl_easy_init();
   if (!curl) {
-    return false;
+    result.success = false;
+    return result;
   }
 
   // 1. Create Cache Dir Struct
@@ -224,20 +217,23 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
   std::cout << "Downloading " << filename << " from " << repo_id << std::endl;
 
   // 2. Check if model file exist
-  FileMetadata metadata = get_metadata_from_hf(repo_id, filename);
-  fs::path blob_file_path(cache_model_dir + "blobs/" + metadata.sha256);
-  fs::path blob_incomplete_file_path(cache_model_dir + "blobs/" +
-                                     metadata.sha256 + ".incomplete");
-  fs::path snapshot_file_path(cache_model_dir + "snapshots/" + metadata.commit +
-                              "/" + filename);
-  fs::path refs_file_path(cache_model_dir + "refs/main");
+  struct FileMetadata metadata = get_metadata_from_hf(repo_id, filename);
+  std::filesystem::path blob_file_path(cache_model_dir + "blobs/" +
+                                       metadata.sha256);
+  std::filesystem::path blob_incomplete_file_path(
+      cache_model_dir + "blobs/" + metadata.sha256 + ".incomplete");
+  std::filesystem::path snapshot_file_path(cache_model_dir + "snapshots/" +
+                                           metadata.commit + "/" + filename);
+  std::filesystem::path refs_file_path(cache_model_dir + "refs/main");
 
-  if (fs::exists(blob_file_path) && !force_download) {
+  result.path = snapshot_file_path;
+
+  if (std::filesystem::exists(blob_file_path) && !force_download) {
     std::cout << "Blob file exists. Skipping download..." << std::endl;
-    return true;
+    return result;
   }
 
-  if (fs::exists(refs_file_path)) {
+  if (std::filesystem::exists(refs_file_path)) {
     std::ifstream refs_file(refs_file_path);
     std::string commit;
     refs_file >> commit;
@@ -260,7 +256,8 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
     std::cerr << "Failed to open file: " << blob_incomplete_file_path
               << std::endl;
     curl_easy_cleanup(curl);
-    return false;
+    result.success = false;
+    return result;
   }
 
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());   // Set URL
@@ -282,25 +279,28 @@ bool Downloader::hf_hub_download(const std::string &repo_id,
   CURLcode res = curl_easy_perform(curl);
   std::cout << std::endl; // Move to the next line after download
 
-  fs::create_directories(snapshot_file_path.parent_path());
+  std::filesystem::create_directories(snapshot_file_path.parent_path());
 
   if (res != CURLE_OK) {
     std::cerr << "CURL request failed: " << curl_easy_strerror(res) << "\n";
     file.close();
     curl_easy_cleanup(curl);
-    return false;
+    result.success = false;
+    return result;
   }
 
-  if (fs::exists(snapshot_file_path)) {
+  if (std::filesystem::exists(snapshot_file_path)) {
     std::cout << "Snapshot file exists. Deleting..." << std::endl;
-    fs::remove(snapshot_file_path);
+    std::filesystem::remove(snapshot_file_path);
   }
-  fs::rename(blob_incomplete_file_path, blob_file_path);
-  fs::create_symlink(blob_file_path, snapshot_file_path);
+  std::filesystem::rename(blob_incomplete_file_path, blob_file_path);
+  std::filesystem::create_symlink(blob_file_path, snapshot_file_path);
 
   file.close();
   curl_easy_cleanup(curl);
 
   std::cout << "Downloaded to: " << snapshot_file_path << std::endl;
-  return res == CURLE_OK;
+
+  result.success = res == CURLE_OK;
+  return result;
 }
