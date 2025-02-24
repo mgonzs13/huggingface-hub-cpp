@@ -15,7 +15,7 @@ target_include_directories(hfhub PUBLIC ${CURL_INCLUDE_DIRS})
 target_link_libraries(hfhub PUBLIC CURL::libcurl)
 
 # Export hfhub and CURL::libcurl for other projects
-export(TARGETS hfhub FILE "${CMAKE_BINARY_DIR}/hfhub-targets.cmake")
+export(TARGETS hfhub CURL::libcurl FILE "${CMAKE_BINARY_DIR}/hfhub-targets.cmake")
 export(PACKAGE hfhub)
 
 install(TARGETS hfhub
