@@ -1,16 +1,57 @@
-#include "downloader.h"
+// MIT License
+//
+// Copyright (c) 2025 Alejandro González Cantón
+// Copyright (c) 2025 Miguel Ángel González Santamarta
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include "hfhub_cpp.h"
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <curl/curl.h>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 #include <sys/stat.h>
 #include <sys/types.h>
 
-using namespace huggingface_hub;
+namespace huggingface_hub {
+volatile sig_atomic_t stop_download = 0;
+void handle_sigint(int) { stop_download = 1; }
+
+void log_info(const std::string &message) {
+  fprintf(stderr, "[INFO] %s\n", message.c_str());
+  fflush(stderr);
+}
+
+void log_info_with_carriage_return(const std::string &message) {
+  fprintf(stderr, "\r\033[1A\033[2K"); // Move up and clear line
+  fprintf(stderr, "[INFO] %s\n", message.c_str());
+  fflush(stderr);
+}
+
+void log_error(const std::string &message) {
+  fprintf(stderr, "[ERROR] %s\n", message.c_str());
+  fflush(stderr);
+}
 
 long get_file_size(const std::string &filename) {
   struct stat stat_buf;
@@ -57,7 +98,7 @@ std::string create_cache_system(const std::string &cache_dir,
 
 size_t write_string_data(void *ptr, size_t size, size_t nmemb, void *stream) {
   if (!stream) {
-    std::cerr << "Error: stream is null!" << std::endl;
+    log_error("Error: stream is null!");
     return 0;
   }
   std::string *out = static_cast<std::string *>(stream);
@@ -67,12 +108,12 @@ size_t write_string_data(void *ptr, size_t size, size_t nmemb, void *stream) {
 
 size_t write_file_data(void *ptr, size_t size, size_t nmemb, void *stream) {
   if (!stream) {
-    std::cerr << "Error: stream is null!" << std::endl;
+    log_error("Error: stream is null!");
     return 0;
   }
   std::ofstream *out = static_cast<std::ofstream *>(stream);
   if (!out->is_open()) {
-    std::cerr << "Error: output file stream is not open!" << std::endl;
+    log_error("Error: output file stream is not open!");
     return 0;
   }
   out->write(static_cast<char *>(ptr), size * nmemb);
@@ -110,16 +151,15 @@ uint64_t extract_file_size(const std::string &response) {
   return 0; // Return empty if not found
 }
 
-struct FileMetadata get_metadata_from_hf(const std::string &repo,
-                                         const std::string &file) {
+std::variant<struct FileMetadata, std::string>
+get_model_metadata_from_hf(const std::string &repo, const std::string &file) {
   struct FileMetadata metadata;
   std::string url = "https://huggingface.co/" + repo + "/raw/main/" + file;
   std::string response, headers;
 
   CURL *curl = curl_easy_init();
   if (!curl) {
-    std::cerr << "Failed to initialize CURL\n";
-    return metadata;
+    return "Failed to initialize CURL";
   }
 
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -133,8 +173,7 @@ struct FileMetadata get_metadata_from_hf(const std::string &repo,
   curl_easy_cleanup(curl);
 
   if (res != CURLE_OK) {
-    std::cerr << "CURL request failed: " << curl_easy_strerror(res) << "\n";
-    return metadata;
+    return "CURL request failed: " + std::string(curl_easy_strerror(res));
   }
 
   std::string line;
@@ -150,11 +189,6 @@ struct FileMetadata get_metadata_from_hf(const std::string &repo,
   }
   metadata.commit.erase(metadata.commit.find_last_not_of(" \n\r\t") +
                         1); // Trim trailing whitespace
-
-  std::cout << "SHA256: " << metadata.sha256 << std::endl;
-  std::cout << "Commit: " << metadata.commit << std::endl;
-  std::cout << "Size: " << metadata.size << std::endl;
-
   return metadata;
 }
 
@@ -178,46 +212,57 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
     double remaining = (total - now) / speed;
 
     // Print progress bar
-    std::cout << "\r[";
+    std::ostringstream progress;
+    progress << "[";
     for (int i = 0; i < filled; ++i)
-      std::cout << "#";
+      progress << "#";
     for (int i = filled; i < width; ++i)
-      std::cout << " ";
-    std::cout << "] " << std::fixed << std::setprecision(2) << (percent * 100)
-              << "%";
+      progress << " ";
+    progress << "] " << std::fixed << std::setprecision(2) << (percent * 100)
+             << "%";
 
-    std::cout << "   " << downloaded / 1024 / 1024 << " MB / "
-              << size / 1024 / 1024 << " MB";
+    progress << "   " << downloaded / 1024 / 1024 << " MB / "
+             << size / 1024 / 1024 << " MB";
 
     // Print speed and ETA
-    std::cout << " " << (speed / 1024 / 1024)
-              << " MB/s | ETA: " << static_cast<int>(remaining) << "s   "
-              << std::flush;
+    progress << " " << (speed / 1024 / 1024)
+             << " MB/s | ETA: " << static_cast<int>(remaining) << "s   ";
+    log_info_with_carriage_return(progress.str());
   }
+  if (stop_download) {
+    return 1; // Non-zero return value cancels the transfer
+  }
+
   return 0; // Continue downloading
 }
 
-struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
-                                                  const std::string &filename,
-                                                  const std::string &cache_dir,
-                                                  bool force_download) {
+struct DownloadResult hf_hub_download(const std::string &repo_id,
+                                      const std::string &filename,
+                                      const std::string &cache_dir,
+                                      bool force_download) {
+  signal(SIGINT, handle_sigint);
 
   struct DownloadResult result;
   result.success = true;
 
-  CURL *curl = curl_easy_init();
-  if (!curl) {
+  // 1. Check that model exists on Hugging Face
+  auto metadata_result = get_model_metadata_from_hf(repo_id, filename);
+  if (std::holds_alternative<std::string>(metadata_result)) {
+    log_error(std::get<std::string>(metadata_result));
     result.success = false;
     return result;
   }
 
-  // 1. Create Cache Dir Struct
+  // 2. Create Cache Dir Struct
   std::string cache_model_dir = create_cache_system(cache_dir, repo_id);
-  std::cout << "Cache directory: " << cache_model_dir << std::endl;
-  std::cout << "Downloading " << filename << " from " << repo_id << std::endl;
+  log_info("Cache directory: " + cache_model_dir);
+  log_info("Downloading " + filename + " from " + repo_id);
 
-  // 2. Check if model file exist
-  struct FileMetadata metadata = get_metadata_from_hf(repo_id, filename);
+  struct FileMetadata metadata = std::get<struct FileMetadata>(metadata_result);
+  log_info("SHA256: " + metadata.sha256);
+  log_info("Commit: " + metadata.commit);
+  log_info("Size: " + std::to_string(metadata.size) + " bytes");
+
   std::filesystem::path blob_file_path(cache_model_dir + "blobs/" +
                                        metadata.sha256);
   std::filesystem::path blob_incomplete_file_path(
@@ -229,7 +274,7 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   result.path = snapshot_file_path;
 
   if (std::filesystem::exists(blob_file_path) && !force_download) {
-    std::cout << "Blob file exists. Skipping download..." << std::endl;
+    log_info("Blob file exists. Skipping download...");
     return result;
   }
 
@@ -245,16 +290,20 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   }
 
   // 3. Download the file
+  CURL *curl = curl_easy_init();
+  if (!curl) {
+    result.success = false;
+    return result;
+  }
+
   std::string url =
       "https://huggingface.co/" + repo_id + "/resolve/main/" + filename;
 
-  long existing_size = get_file_size(blob_incomplete_file_path);
   std::ofstream file(blob_incomplete_file_path,
                      std::ios::binary | std::ios::app);
 
   if (!file.is_open()) {
-    std::cerr << "Failed to open file: " << blob_incomplete_file_path
-              << std::endl;
+    log_error("Failed to open file: " + blob_incomplete_file_path.string());
     curl_easy_cleanup(curl);
     result.success = false;
     return result;
@@ -270,19 +319,28 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
                    progress_callback); // Progress callback
   curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, &metadata);
 
+  // Resume download if file exists
+  long existing_size = get_file_size(blob_incomplete_file_path);
   if (existing_size > 0 && !force_download) {
     curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE,
-                     (curl_off_t)existing_size); // Resume download
-    std::cout << "Resuming download from " << existing_size << " bytes...\n";
+                     (curl_off_t)existing_size);
+    log_info("Resuming download from " + std::to_string(existing_size) +
+             " bytes...");
   }
 
   CURLcode res = curl_easy_perform(curl);
-  std::cout << std::endl; // Move to the next line after download
+  fprintf(stderr, "\n");
 
   std::filesystem::create_directories(snapshot_file_path.parent_path());
 
-  if (res != CURLE_OK) {
-    std::cerr << "CURL request failed: " << curl_easy_strerror(res) << "\n";
+  if (stop_download) {
+    log_info("Download interrupted. Exiting...");
+    file.close();
+    curl_easy_cleanup(curl);
+    result.success = false;
+    return result;
+  } else if (res != CURLE_OK) {
+    log_error("CURL request failed: " + std::string(curl_easy_strerror(res)));
     file.close();
     curl_easy_cleanup(curl);
     result.success = false;
@@ -290,7 +348,7 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   }
 
   if (std::filesystem::exists(snapshot_file_path)) {
-    std::cout << "Snapshot file exists. Deleting..." << std::endl;
+    log_info("Snapshot file exists. Deleting...");
     std::filesystem::remove(snapshot_file_path);
   }
   std::filesystem::rename(blob_incomplete_file_path, blob_file_path);
@@ -299,8 +357,9 @@ struct DownloadResult Downloader::hf_hub_download(const std::string &repo_id,
   file.close();
   curl_easy_cleanup(curl);
 
-  std::cout << "Downloaded to: " << snapshot_file_path << std::endl;
+  log_info("Downloaded to: " + snapshot_file_path.string());
 
   result.success = res == CURLE_OK;
   return result;
 }
+} // namespace huggingface_hub
