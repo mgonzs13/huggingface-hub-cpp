@@ -151,6 +151,21 @@ uint64_t extract_file_size(const std::string &response) {
   return 0; // Return empty if not found
 }
 
+std::string extract_commit(const std::string &response) {
+  std::istringstream stream(response);
+  std::string line;
+
+  while (std::getline(stream, line)) {
+    if (line.find("x-repo-commit:") != std::string::npos) {
+      auto result = line.substr(line.find(":") + 2); // Extract after ": "
+      result.erase(result.find_last_not_of(" \n\r\t") +
+                   1); // Trim trailing whitespace
+      return result;
+    }
+  }
+  return ""; // Return empty if not found
+}
+
 std::variant<struct FileMetadata, std::string>
 get_model_metadata_from_hf(const std::string &repo, const std::string &file) {
   struct FileMetadata metadata;
@@ -176,19 +191,10 @@ get_model_metadata_from_hf(const std::string &repo, const std::string &file) {
     return "CURL request failed: " + std::string(curl_easy_strerror(res));
   }
 
-  std::string line;
   metadata.sha256 = extract_SHA256(response);
   metadata.size = extract_file_size(response);
+  metadata.commit = extract_commit(headers);
 
-  std::istringstream header_stream(headers);
-  while (std::getline(header_stream, line)) {
-    if (line.find("x-repo-commit:") != std::string::npos) {
-      metadata.commit = line.substr(line.find(":") + 2);
-      break;
-    }
-  }
-  metadata.commit.erase(metadata.commit.find_last_not_of(" \n\r\t") +
-                        1); // Trim trailing whitespace
   return metadata;
 }
 
@@ -328,6 +334,7 @@ struct DownloadResult hf_hub_download(const std::string &repo_id,
              " bytes...");
   }
 
+  fprintf(stderr, "\n");
   CURLcode res = curl_easy_perform(curl);
   fprintf(stderr, "\n");
 
