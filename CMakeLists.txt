@@ -5,7 +5,7 @@ project(HFHub CXX)
 find_package(CURL REQUIRED)
 
 # Define the hfhub static library and link it to CURL
-add_library(hfhub STATIC src/hfhub_cpp.cpp)
+add_library(hfhub STATIC src/huggingface_hub.cpp)
 
 # Ensure CURL is available for consumers
 target_include_directories(hfhub PUBLIC

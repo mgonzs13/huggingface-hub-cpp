@@ -21,7 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "hfhub_cpp.h"
+#include "huggingface_hub.h"
 #include <algorithm>
 #include <chrono>
 #include <csignal>

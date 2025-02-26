@@ -1,4 +1,4 @@
-#include "hfhub_cpp.h"
+#include "huggingface_hub.h"
 #include <iostream>
 
 int main() {

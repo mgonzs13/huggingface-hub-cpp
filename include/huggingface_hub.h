@@ -21,8 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef HFHUB_CPP_H
-#define HFHUB_CPP_H
+#ifndef HUGGINGFACE_HUB_H
+#define HUGGINGFACE_HUB_H
 
 #include <stdint.h>
 #include <string>
@@ -48,5 +48,5 @@ hf_hub_download(const std::string &repo_id, const std::string &filename,
                 const std::string &cache_dir = "~/.cache/huggingface/hub",
                 bool force_download = false);
 
-#endif // HFHUB_CPP_H
+#endif // HUGGINGFACE_HUB_H
 }
