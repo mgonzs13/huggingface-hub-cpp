@@ -107,15 +107,13 @@ hf_hub_download(const std::string &repo_id, const std::string &filename,
  * "~/.cache/huggingface/hub".
  * @param force_download If true, forces the download even if the file already
  * exists in the cache.
- * @param download_shards If true, download model shards using regex to find
- * the amount of shards the model is splitted into.
  * @return A DownloadResult structure containing the success status and the path
  * of the downloaded file.
  */
 struct DownloadResult hf_hub_download_with_shards(
     const std::string &repo_id, const std::string &filename,
     const std::string &cache_dir = "~/.cache/huggingface/hub",
-    bool force_download = false, bool download_shards = true);
+    bool force_download = false);
 
 #endif // HUGGINGFACE_HUB_H
 } // namespace huggingface_hub
