@@ -21,19 +21,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "huggingface_hub.h"
 #include <algorithm>
 #include <chrono>
 #include <csignal>
-#include <curl/curl.h>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <regex>
 #include <sstream>
+
+#include <curl/curl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "huggingface_hub.h"
+
 namespace huggingface_hub {
+
 volatile sig_atomic_t stop_download = 0;
 void handle_sigint(int) { stop_download = 1; }
 
@@ -369,4 +373,44 @@ struct DownloadResult hf_hub_download(const std::string &repo_id,
   result.success = res == CURLE_OK;
   return result;
 }
+
+struct DownloadResult hf_hub_download_with_shards(const std::string &repo_id,
+                                                  const std::string &filename,
+                                                  const std::string &cache_dir,
+                                                  bool force_download,
+                                                  bool download_shards) {
+
+  if (download_shards) {
+
+    std::regex pattern(R"(-([0-9]+)-of-([0-9]+)\.gguf)");
+    std::smatch match;
+
+    if (std::regex_search(filename, match, pattern)) {
+      int total_shards = std::stoi(match[2]);
+      std::string base_name = filename.substr(0, match.position(0));
+
+      // Download shards
+      for (int i = 1; i <= total_shards; ++i) {
+        char shard_file[256];
+        snprintf(shard_file, sizeof(shard_file), "%s-%05d-of-%05d.gguf",
+                 base_name.c_str(), i, total_shards);
+        auto aux_res =
+            hf_hub_download(repo_id, shard_file, cache_dir, force_download);
+
+        if (!aux_res.success) {
+          return aux_res;
+        }
+      }
+
+      // Return first shard
+      char first_shard[256];
+      snprintf(first_shard, sizeof(first_shard), "%s-00001-of-%05d.gguf",
+               base_name.c_str(), total_shards);
+      return hf_hub_download(repo_id, first_shard, cache_dir, false);
+    }
+  }
+
+  return hf_hub_download(repo_id, filename, cache_dir, force_download);
+}
+
 } // namespace huggingface_hub
