@@ -388,7 +388,7 @@ struct DownloadResult hf_hub_download_with_shards(const std::string &repo_id,
 
     // Download shards
     for (int i = 1; i <= total_shards; ++i) {
-      char shard_file[256];
+      char shard_file[512];
       snprintf(shard_file, sizeof(shard_file), "%s-%05d-of-%05d.gguf",
                base_name.c_str(), i, total_shards);
       auto aux_res =
@@ -400,7 +400,7 @@ struct DownloadResult hf_hub_download_with_shards(const std::string &repo_id,
     }
 
     // Return first shard
-    char first_shard[256];
+    char first_shard[512];
     snprintf(first_shard, sizeof(first_shard), "%s-00001-of-%05d.gguf",
              base_name.c_str(), total_shards);
     return hf_hub_download(repo_id, first_shard, cache_dir, false);
