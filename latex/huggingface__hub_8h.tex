@@ -30,7 +30,7 @@ std\+::variant$<$ struct \mbox{\hyperlink{structhuggingface__hub_1_1FileMetadata
 \begin{DoxyCompactList}\small\item\em Get metadata of a model file from Hugging Face Hub. \end{DoxyCompactList}\item 
 struct \mbox{\hyperlink{structhuggingface__hub_1_1DownloadResult}{Download\+Result}} \mbox{\hyperlink{huggingface__hub_8h_ad3bc4085f79006e58fb551cadf2083aa}{huggingface\+\_\+hub\+::hf\+\_\+hub\+\_\+download}} (const std\+::string \&repo\+\_\+id, const std\+::string \&filename, const std\+::string \&cache\+\_\+dir="{}\texorpdfstring{$\sim$}{\string~}/.cache/huggingface/hub"{}, bool force\+\_\+download=false)
 \begin{DoxyCompactList}\small\item\em Download a file from Hugging Face Hub. \end{DoxyCompactList}\item 
-struct \mbox{\hyperlink{structhuggingface__hub_1_1DownloadResult}{Download\+Result}} \mbox{\hyperlink{huggingface__hub_8h_a00d6e3b2adbdc5459618c8eef9491c04}{huggingface\+\_\+hub\+::hf\+\_\+hub\+\_\+download\+\_\+with\+\_\+shards}} (const std\+::string \&repo\+\_\+id, const std\+::string \&filename, const std\+::string \&cache\+\_\+dir="{}\texorpdfstring{$\sim$}{\string~}/.cache/huggingface/hub"{}, bool force\+\_\+download=false, bool download\+\_\+shards=true)
+struct \mbox{\hyperlink{structhuggingface__hub_1_1DownloadResult}{Download\+Result}} \mbox{\hyperlink{huggingface__hub_8h_a3d36f787415e7ea30d63b9f537316fea}{huggingface\+\_\+hub\+::hf\+\_\+hub\+\_\+download\+\_\+with\+\_\+shards}} (const std\+::string \&repo\+\_\+id, const std\+::string \&filename, const std\+::string \&cache\+\_\+dir="{}\texorpdfstring{$\sim$}{\string~}/.cache/huggingface/hub"{}, bool force\+\_\+download=false)
 \begin{DoxyCompactList}\small\item\em Download a file from Hugging Face Hub. \end{DoxyCompactList}\end{DoxyCompactItemize}
 
 
@@ -88,11 +88,11 @@ This function downloads a specified file from a given repository on the Hugging 
 \begin{DoxyReturn}{Returns}
 A Download\+Result structure containing the success status and the path of the downloaded file. 
 \end{DoxyReturn}
-\Hypertarget{huggingface__hub_8h_a00d6e3b2adbdc5459618c8eef9491c04}\index{huggingface\_hub.h@{huggingface\_hub.h}!hf\_hub\_download\_with\_shards@{hf\_hub\_download\_with\_shards}}
+\Hypertarget{huggingface__hub_8h_a3d36f787415e7ea30d63b9f537316fea}\index{huggingface\_hub.h@{huggingface\_hub.h}!hf\_hub\_download\_with\_shards@{hf\_hub\_download\_with\_shards}}
 \index{hf\_hub\_download\_with\_shards@{hf\_hub\_download\_with\_shards}!huggingface\_hub.h@{huggingface\_hub.h}}
 \doxysubsubsection{\texorpdfstring{hf\_hub\_download\_with\_shards()}{hf\_hub\_download\_with\_shards()}}
-{\footnotesize\ttfamily \label{huggingface__hub_8h_a00d6e3b2adbdc5459618c8eef9491c04} 
-struct Download\+Result huggingface\+\_\+hub\+::hf\+\_\+hub\+\_\+download\+\_\+with\+\_\+shards (\begin{DoxyParamCaption}\item[{const std\+::string \&}]{repo\+\_\+id}{, }\item[{const std\+::string \&}]{filename}{, }\item[{const std\+::string \&}]{cache\+\_\+dir}{ = {\ttfamily "{}\texorpdfstring{$\sim$}{\string~}/.cache/huggingface/hub"{}}, }\item[{bool}]{force\+\_\+download}{ = {\ttfamily false}, }\item[{bool}]{download\+\_\+shards}{ = {\ttfamily true}}\end{DoxyParamCaption})}
+{\footnotesize\ttfamily \label{huggingface__hub_8h_a3d36f787415e7ea30d63b9f537316fea} 
+struct Download\+Result huggingface\+\_\+hub\+::hf\+\_\+hub\+\_\+download\+\_\+with\+\_\+shards (\begin{DoxyParamCaption}\item[{const std\+::string \&}]{repo\+\_\+id}{, }\item[{const std\+::string \&}]{filename}{, }\item[{const std\+::string \&}]{cache\+\_\+dir}{ = {\ttfamily "{}\texorpdfstring{$\sim$}{\string~}/.cache/huggingface/hub"{}}, }\item[{bool}]{force\+\_\+download}{ = {\ttfamily false}}\end{DoxyParamCaption})}
 
 
 
@@ -109,8 +109,6 @@ This function downloads a specified file from a given repository on the Hugging 
 {\em cache\+\_\+dir} & The directory to cache the downloaded file. Default is "{}\texorpdfstring{$\sim$}{\string~}/.\+cache/huggingface/hub"{}. \\
 \hline
 {\em force\+\_\+download} & If true, forces the download even if the file already exists in the cache. \\
-\hline
-{\em download\+\_\+shards} & If true, download model shards using regex to find the amount of shards the model is splitted into. \\
 \hline
 \end{DoxyParams}
 \begin{DoxyReturn}{Returns}
