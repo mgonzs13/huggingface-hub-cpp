@@ -6,7 +6,6 @@ With this library, C++ developers can integrate Hugging Face model downloads dir
 
 [![GitHub License](https://img.shields.io/github/license/agonzc34/huggingface-hub-cpp)](https://opensource.org/license/mit) [![GitHub release](https://img.shields.io/github/release/agonzc34/huggingface-hub-cpp.svg)](https://github.com/agonzc34/huggingface-hub-cpp/releases) [![Code Size](https://img.shields.io/github/languages/code-size/agonzc34/huggingface-hub-cpp.svg?branch=main)](https://github.com/agonzc34/huggingface-hub-cpp?branch=main) [![Last Commit](https://img.shields.io/github/last-commit/agonzc34/huggingface-hub-cpp.svg)](https://github.com/agonzc34/huggingface-hub-cpp/commits/main) [![GitHub issues](https://img.shields.io/github/issues/agonzc34/huggingface-hub-cpp)](https://github.com/agonzc34/huggingface-hub-cpp/issues) [![GitHub pull requests](https://img.shields.io/github/issues-pr/agonzc34/huggingface-hub-cpp)](https://github.com/agonzc34/huggingface-hub-cpp/pulls) [![Contributors](https://img.shields.io/github/contributors/agonzc34/huggingface-hub-cpp.svg)](https://github.com/agonzc34/huggingface-hub-cpp/graphs/contributors) [![Build](https://github.com/agonzc34/huggingface-hub-cpp/actions/workflows/cmake-build-status.yml/badge.svg)](https://github.com/agonzc34/huggingface-hub-cpp/actions/workflows/cmake-build-status.yml?branch=main) [![Doxygen Deployment](https://github.com/agonzc34/huggingface-hub-cpp/actions/workflows/doxygen-deployment.yml/badge.svg)](https://agonzc34.github.io/huggingface-hub-cpp/)
 
-
 ## Table of Contents
 
 - [huggingface-hub-cpp](#huggingface-hub-cpp)
@@ -64,6 +63,7 @@ int main() {
   } else {
     std::cout << "Error" << std::endl;
   }
+}
 ```
 
 ### Running the demo app
