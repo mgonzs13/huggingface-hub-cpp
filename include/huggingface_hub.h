@@ -93,7 +93,7 @@ get_model_metadata_from_hf(const std::string &repo, const std::string &file);
 struct DownloadResult
 hf_hub_download(const std::string &repo_id, const std::string &filename,
                 const std::string &cache_dir = "~/.cache/huggingface/hub",
-                bool force_download = false);
+                bool force_download = false, bool verbose = false);
 
 /**
  * @brief Download a file from Hugging Face Hub.
