@@ -41,6 +41,16 @@ namespace huggingface_hub {
 volatile sig_atomic_t stop_download = 0;
 void handle_sigint(int) { stop_download = 1; }
 
+bool log_verbose = false;
+
+void log_debug(const std::string &message) {
+  if (!log_verbose) {
+    return;
+  }
+  fprintf(stderr, "[DEBUG] %s\n", message.c_str());
+  fflush(stderr);
+}
+
 void log_info(const std::string &message) {
   fprintf(stderr, "[INFO] %s\n", message.c_str());
   fflush(stderr);
@@ -246,77 +256,20 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
   return 0; // Continue downloading
 }
 
-struct DownloadResult hf_hub_download(const std::string &repo_id,
-                                      const std::string &filename,
-                                      const std::string &cache_dir,
-                                      bool force_download) {
-  signal(SIGINT, handle_sigint);
-
-  struct DownloadResult result;
-  result.success = true;
-
-  // 1. Check that model exists on Hugging Face
-  auto metadata_result = get_model_metadata_from_hf(repo_id, filename);
-  if (std::holds_alternative<std::string>(metadata_result)) {
-    log_error(std::get<std::string>(metadata_result));
-    result.success = false;
-    return result;
-  }
-
-  // 2. Create Cache Dir Struct
-  std::string cache_model_dir = create_cache_system(cache_dir, repo_id);
-  log_info("Cache directory: " + cache_model_dir);
-  log_info("Downloading " + filename + " from " + repo_id);
-
-  struct FileMetadata metadata = std::get<struct FileMetadata>(metadata_result);
-  log_info("SHA256: " + metadata.sha256);
-  log_info("Commit: " + metadata.commit);
-  log_info("Size: " + std::to_string(metadata.size) + " bytes");
-
-  std::filesystem::path blob_file_path(cache_model_dir + "blobs/" +
-                                       metadata.sha256);
-  std::filesystem::path blob_incomplete_file_path(
-      cache_model_dir + "blobs/" + metadata.sha256 + ".incomplete");
-  std::filesystem::path snapshot_file_path(cache_model_dir + "snapshots/" +
-                                           metadata.commit + "/" + filename);
-  std::filesystem::path refs_file_path(cache_model_dir + "refs/main");
-
-  result.path = snapshot_file_path;
-
-  if (std::filesystem::exists(blob_file_path) && !force_download) {
-    log_info("Blob file exists. Skipping download...");
-    return result;
-  }
-
-  if (std::filesystem::exists(refs_file_path)) {
-    std::ifstream refs_file(refs_file_path);
-    std::string commit;
-    refs_file >> commit;
-    refs_file.close();
-  } else {
-    std::ofstream refs_file(refs_file_path);
-    refs_file << metadata.commit;
-    refs_file.close();
-  }
-
-  // 3. Download the file
+CURLcode perform_download(std::string url,
+                          std::string blob_incomplete_file_path,
+                          bool force_download, struct FileMetadata metadata) {
   CURL *curl = curl_easy_init();
   if (!curl) {
-    result.success = false;
-    return result;
+    return CURLE_FAILED_INIT;
   }
-
-  std::string url =
-      "https://huggingface.co/" + repo_id + "/resolve/main/" + filename;
 
   std::ofstream file(blob_incomplete_file_path,
                      std::ios::binary | std::ios::app);
 
   if (!file.is_open()) {
-    log_error("Failed to open file: " + blob_incomplete_file_path.string());
-    curl_easy_cleanup(curl);
-    result.success = false;
-    return result;
+    log_error("Error: failed to open file stream!");
+    return CURLE_FAILED_INIT;
   }
 
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());   // Set URL
@@ -338,39 +291,99 @@ struct DownloadResult hf_hub_download(const std::string &repo_id,
              " bytes...");
   }
 
-  fprintf(stderr, "\n");
+  fprintf(stderr, "\n"); // New line after progress bar
   CURLcode res = curl_easy_perform(curl);
-  fprintf(stderr, "\n");
+  fprintf(stderr, "\n"); // New line after progress bar
+  curl_easy_cleanup(curl);
+  file.close();
+  return res;
+}
 
+struct DownloadResult hf_hub_download(const std::string &repo_id,
+                                      const std::string &filename,
+                                      const std::string &cache_dir,
+                                      bool force_download, bool verbose) {
+  signal(SIGINT, handle_sigint);
+  log_verbose = verbose;
+
+  struct DownloadResult result;
+  result.success = true;
+
+  // 1. Check that model exists on Hugging Face
+  auto metadata_result = get_model_metadata_from_hf(repo_id, filename);
+  if (std::holds_alternative<std::string>(metadata_result)) {
+    log_error(std::get<std::string>(metadata_result));
+    result.success = false;
+    return result;
+  }
+
+  // 2. Create Cache Dir Struct
+  std::string cache_model_dir = create_cache_system(cache_dir, repo_id);
+  log_debug("Cache directory: " + cache_model_dir);
+  log_info("Downloading " + filename + " from " + repo_id);
+
+  struct FileMetadata metadata = std::get<struct FileMetadata>(metadata_result);
+  log_debug("SHA256: " + metadata.sha256);
+  log_debug("Commit: " + metadata.commit);
+  log_debug("Size: " + std::to_string(metadata.size) + " bytes");
+
+  std::filesystem::path blob_file_path(cache_model_dir + "blobs/" +
+                                       metadata.sha256);
+  std::filesystem::path blob_incomplete_file_path(
+      cache_model_dir + "blobs/" + metadata.sha256 + ".incomplete");
+  std::filesystem::path snapshot_file_path(cache_model_dir + "snapshots/" +
+                                           metadata.commit + "/" + filename);
+  std::filesystem::path refs_file_path(cache_model_dir + "refs/main");
+
+  result.path = snapshot_file_path;
+
+  if (std::filesystem::exists(snapshot_file_path) &&
+      std::filesystem::exists(blob_file_path) && !force_download) {
+    log_info("Snapshot file exists. Skipping download...");
+    return result;
+  }
+
+  if (std::filesystem::exists(refs_file_path)) {
+    std::ifstream refs_file(refs_file_path);
+    std::string commit;
+    refs_file >> commit;
+    refs_file.close();
+  } else {
+    std::ofstream refs_file(refs_file_path);
+    refs_file << metadata.commit;
+    refs_file.close();
+  }
+
+  // 3. Download the file
+  std::string url =
+      "https://huggingface.co/" + repo_id + "/resolve/main/" + filename;
   std::filesystem::create_directories(snapshot_file_path.parent_path());
 
-  if (stop_download) {
-    log_info("Download interrupted. Exiting...");
-    file.close();
-    curl_easy_cleanup(curl);
-    result.success = false;
-    return result;
-  } else if (res != CURLE_OK) {
-    log_error("CURL request failed: " + std::string(curl_easy_strerror(res)));
-    file.close();
-    curl_easy_cleanup(curl);
-    result.success = false;
-    return result;
+  if (!std::filesystem::exists(blob_file_path) || force_download) {
+    CURLcode res = perform_download(url, blob_incomplete_file_path,
+                                    force_download, metadata);
+    result.success = res == CURLE_OK;
+
+    if (stop_download) {
+      log_info("Download interrupted. Exiting...");
+      return result;
+    } else if (!result.success) {
+      log_error("CURL request failed: " + std::string(curl_easy_strerror(res)));
+      return result;
+    } else {
+      std::filesystem::rename(blob_incomplete_file_path, blob_file_path);
+    }
   }
 
   if (std::filesystem::exists(snapshot_file_path)) {
-    log_info("Snapshot file exists. Deleting...");
+    log_debug("Snapshot file exists. Deleting...");
     std::filesystem::remove(snapshot_file_path);
   }
-  std::filesystem::rename(blob_incomplete_file_path, blob_file_path);
   std::filesystem::create_symlink(blob_file_path, snapshot_file_path);
-
-  file.close();
-  curl_easy_cleanup(curl);
 
   log_info("Downloaded to: " + snapshot_file_path.string());
 
-  result.success = res == CURLE_OK;
+  result.success = true;
   return result;
 }
 
