@@ -237,8 +237,8 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
   int terminal_width = get_terminal_width();
   auto elapsed = std::chrono::steady_clock::now() - last_print_time;
 
-  if (total > 0 &&
-      (now == downloaded || std::chrono::duration<double>(elapsed).count() > 0.08)) {
+  if (total > 0 && (now == downloaded ||
+                    std::chrono::duration<double>(elapsed).count() > 0.08)) {
     last_print_time = std::chrono::steady_clock::now();
 
     bool show_speed = terminal_width > 65;
