@@ -29,6 +29,8 @@
 #include <iomanip>
 #include <regex>
 #include <sstream>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #include <curl/curl.h>
 #include <sys/stat.h>
@@ -47,7 +49,7 @@ void log_debug(const std::string &message) {
   if (!log_verbose) {
     return;
   }
-  fprintf(stderr, "[DEBUG] %s\n", message.c_str());
+  fprintf(stderr, "\036[31m[DEBUG] %s\033[0m\n", message.c_str());
   fflush(stderr);
 }
 
@@ -63,7 +65,7 @@ void log_info_with_carriage_return(const std::string &message) {
 }
 
 void log_error(const std::string &message) {
-  fprintf(stderr, "[ERROR] %s\n", message.c_str());
+  fprintf(stderr, "\033[31m[ERROR] %s\033[0m\n", message.c_str());
   fflush(stderr);
 }
 
@@ -212,6 +214,18 @@ get_model_metadata_from_hf(const std::string &repo, const std::string &file) {
   return metadata;
 }
 
+int get_terminal_width() {
+  struct winsize w;
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
+    return w.ws_col;
+  } else {
+    return 80; // Default terminal width
+  }
+}
+
+std::chrono::steady_clock::time_point last_print_time =
+    std::chrono::steady_clock::now();
+
 // Progress bar function
 int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
                       curl_off_t, curl_off_t) {
@@ -220,9 +234,15 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
   uint64_t size = metadata->size;
   uint64_t byte_offset = total - size;
   uint64_t downloaded = now - byte_offset;
+  int terminal_width = get_terminal_width();
+  auto elapsed = std::chrono::steady_clock::now() - last_print_time;
 
-  if (total > 0) {
-    int width = 30; // Progress bar width
+  if (total > 0 && (now == downloaded ||
+                    std::chrono::duration<double>(elapsed).count() > 0.08)) {
+    last_print_time = std::chrono::steady_clock::now();
+
+    bool show_speed = terminal_width > 65;
+    int width = terminal_width - 65 + (show_speed ? 0 : 10);
     float percent = static_cast<float>(downloaded) / size;
     int filled = static_cast<int>(percent * width);
 
@@ -231,22 +251,27 @@ int progress_callback(void *userdata, curl_off_t total, curl_off_t now,
                           1e-6); // Avoid division by zero
     double remaining = (total - now) / speed;
 
-    // Print progress bar
     std::ostringstream progress;
-    progress << "[";
-    for (int i = 0; i < filled; ++i)
-      progress << "#";
-    for (int i = filled; i < width; ++i)
-      progress << " ";
-    progress << "] " << std::fixed << std::setprecision(2) << (percent * 100)
-             << "%";
+
+    // Print progress bar
+    if (terminal_width > 50) {
+      progress << "[";
+      for (int i = 0; i < filled; ++i)
+        progress << "#";
+      for (int i = filled; i < width; ++i)
+        progress << " ";
+      progress << "] ";
+    }
+    progress << std::fixed << std::setprecision(2) << (percent * 100) << "%";
 
     progress << "   " << downloaded / 1024 / 1024 << " MB / "
-             << size / 1024 / 1024 << " MB";
+             << size / 1024 / 1024 << " MB ";
 
-    // Print speed and ETA
-    progress << " " << (speed / 1024 / 1024)
-             << " MB/s | ETA: " << static_cast<int>(remaining) << "s   ";
+    if (show_speed) {
+      progress << " " << (speed / 1024 / 1024) << " MB/s ";
+    }
+    progress << " | ETA: " << std::fixed << std::setprecision(1) << remaining
+             << "s";
     log_info_with_carriage_return(progress.str());
   }
   if (stop_download) {
