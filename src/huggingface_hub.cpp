@@ -463,18 +463,19 @@ struct DownloadResult hf_hub_download_with_shards(const std::string &repo_id,
                                                   const std::string &cache_dir,
                                                   bool force_download) {
 
-  std::regex pattern(R"(-([0-9]+)-of-([0-9]+)\.gguf)");
+  std::regex pattern(R"(-([0-9]+)-of-([0-9]+)\.(\w+))");
   std::smatch match;
 
   if (std::regex_search(filename, match, pattern)) {
     int total_shards = std::stoi(match[2]);
     std::string base_name = filename.substr(0, match.position(0));
+    std::string extension = match[3];
 
     // Download shards
     for (int i = 1; i <= total_shards; ++i) {
       char shard_file[512];
-      snprintf(shard_file, sizeof(shard_file), "%s-%05d-of-%05d.gguf",
-               base_name.c_str(), i, total_shards);
+      snprintf(shard_file, sizeof(shard_file), "%s-%05d-of-%05d.%s",
+               base_name.c_str(), i, total_shards, extension.c_str());
       auto aux_res =
           hf_hub_download(repo_id, shard_file, cache_dir, force_download);
 
@@ -485,8 +486,8 @@ struct DownloadResult hf_hub_download_with_shards(const std::string &repo_id,
 
     // Return first shard
     char first_shard[512];
-    snprintf(first_shard, sizeof(first_shard), "%s-00001-of-%05d.gguf",
-             base_name.c_str(), total_shards);
+    snprintf(first_shard, sizeof(first_shard), "%s-00001-of-%05d.%s",
+             base_name.c_str(), total_shards, extension.c_str());
     return hf_hub_download(repo_id, first_shard, cache_dir, false);
   }
 
