@@ -34,13 +34,14 @@ Before installing, ensure you have the following dependencies installed\+:
 \begin{DoxyItemize}
 \item CMake (Minimum version recommended\+: 3.\+x)
 \item libcurl (Required for handling downloads)
+\item Open\+SSL (Required for handling SHA256 calculation of regular files)
 \end{DoxyItemize}
 
-On Debian-\/based systems, you can install libcurl using\+:
+On Debian-\/based systems, you can install libcurl and Open\+SSL using\+:
 
 
 \begin{DoxyCode}{0}
-\DoxyCodeLine{sudo\ apt-\/get\ install\ libcurl4-\/openssl-\/dev}
+\DoxyCodeLine{sudo\ apt-\/get\ install\ libcurl4-\/openssl-\/dev\ libssl-\/dev}
 
 \end{DoxyCode}
 \hypertarget{index_autotoc_md4}{}\doxysubsection{\texorpdfstring{Build}{Build}}\label{index_autotoc_md4}
