@@ -29,12 +29,13 @@
 #include <iomanip>
 #include <regex>
 #include <sstream>
-#include <sys/ioctl.h>
-#include <unistd.h>
 
 #include <curl/curl.h>
+#include <openssl/evp.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include "huggingface_hub.h"
 
@@ -136,6 +137,48 @@ size_t write_file_data(void *ptr, size_t size, size_t nmemb, void *stream) {
   return size * nmemb;
 }
 
+// Function to calculate SHA256 hash of a file
+std::string calculate_file_SHA256(const std::string &file_content) {
+  // Use EVP API for SHA256
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  if (!mdctx) {
+    log_error("Error: Failed to create EVP_MD_CTX!");
+    return "";
+  }
+
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr) != 1) {
+    log_error("Error: Failed to initialize SHA256 digest!");
+    EVP_MD_CTX_free(mdctx);
+    return "";
+  }
+
+  // Update the digest with the file content
+  if (EVP_DigestUpdate(mdctx, file_content.data(), file_content.size()) != 1) {
+    log_error("Error: Failed to update SHA256 digest!");
+    EVP_MD_CTX_free(mdctx);
+    return "";
+  }
+
+  unsigned char hash[EVP_MAX_MD_SIZE];
+  unsigned int hash_len = 0;
+  if (EVP_DigestFinal_ex(mdctx, hash, &hash_len) != 1) {
+    log_error("Error: Failed to finalize SHA256 digest!");
+    EVP_MD_CTX_free(mdctx);
+    return "";
+  }
+
+  EVP_MD_CTX_free(mdctx);
+
+  // Convert hash to hexadecimal string
+  std::ostringstream hash_string;
+  for (unsigned int i = 0; i < hash_len; ++i) {
+    hash_string << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<int>(hash[i]);
+  }
+
+  return hash_string.str();
+}
+
 // Function to extract SHA256 from Git LFS metadata
 std::string extract_SHA256(const std::string &response) {
   std::istringstream stream(response);
@@ -149,7 +192,9 @@ std::string extract_SHA256(const std::string &response) {
       return result;
     }
   }
-  return ""; // Return empty if not found
+
+  return calculate_file_SHA256(
+      response); // Return SHA256 of the file if no metadata found
 }
 
 uint64_t extract_file_size(const std::string &response) {
@@ -164,7 +209,8 @@ uint64_t extract_file_size(const std::string &response) {
       return size;
     }
   }
-  return 0; // Return empty if not found
+
+  return static_cast<uint64_t>(response.size());
 }
 
 std::string extract_commit(const std::string &response) {
@@ -207,7 +253,6 @@ get_model_metadata_from_hf(const std::string &repo, const std::string &file) {
     return "CURL request failed: " + std::string(curl_easy_strerror(res));
   }
 
-  log_info("Metadata Response: %s" + response + "\n");
   metadata.sha256 = extract_SHA256(response);
   metadata.size = extract_file_size(response);
   metadata.commit = extract_commit(headers);

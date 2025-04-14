@@ -26,11 +26,12 @@ Before installing, ensure you have the following dependencies installed:
 
 - CMake (Minimum version recommended: 3.x)
 - libcurl (Required for handling downloads)
+- OpenSSL (Required for handling SHA256 calculation of regular files)
 
-On Debian-based systems, you can install libcurl using:
+On Debian-based systems, you can install libcurl and OpenSSL using:
 
 ```shell
-sudo apt-get install libcurl4-openssl-dev
+sudo apt-get install libcurl4-openssl-dev libssl-dev
 ```
 
 ### Build

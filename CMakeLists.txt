@@ -4,6 +4,9 @@ project(HFHub CXX)
 # Find CURL package
 find_package(CURL REQUIRED)
 
+# Find OpenSSL package
+find_package(OpenSSL REQUIRED)
+
 # Define the hfhub static library and link it to CURL
 add_library(hfhub STATIC src/huggingface_hub.cpp)
 
@@ -13,7 +16,7 @@ target_include_directories(hfhub PUBLIC
   $<INSTALL_INTERFACE:include>
   ${CURL_INCLUDE_DIRS}
 )
-target_link_libraries(hfhub PUBLIC CURL::libcurl)
+target_link_libraries(hfhub PUBLIC CURL::libcurl OpenSSL::Crypto)
 
 # Export target
 install(TARGETS hfhub
