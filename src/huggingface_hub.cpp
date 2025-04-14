@@ -207,6 +207,7 @@ get_model_metadata_from_hf(const std::string &repo, const std::string &file) {
     return "CURL request failed: " + std::string(curl_easy_strerror(res));
   }
 
+  log_info("Metadata Response: %s" + response + "\n");
   metadata.sha256 = extract_SHA256(response);
   metadata.size = extract_file_size(response);
   metadata.commit = extract_commit(headers);
